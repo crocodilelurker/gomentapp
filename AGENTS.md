@@ -6,3 +6,4 @@
 3. Never write any mock data unless explicitly mentioned to write the mock data
 4. Never write any non-truth data in the development, unless explicitly mentioned
 5. Always update the README.md whenever necessary
+6. If I ask to run unit tests than save the run reports to ./test-reports/run${run_number}.md file in short 
