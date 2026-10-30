@@ -1,0 +1,22 @@
+// Gateway route map — the single place to wire public URLs to internal services.
+//
+// A request to `path` on the gateway is forwarded to `target`. The `path` prefix
+// is stripped and replaced with `rewriteTo` before forwarding:
+//
+//   { path: '/api/pss', target: SERVICE_URLS.POLICY_SCHEME_SERVICE, rewriteTo: '' }
+//     GET /api/pss/health   ->  GET http://policy-scheme-service:8000/health
+//
+//   { path: '/api/pss', target: SERVICE_URLS.POLICY_SCHEME_SERVICE, rewriteTo: '/v1' }
+//     GET /api/pss/health   ->  GET http://policy-scheme-service:8000/v1/health
+//
+// Inside the compose stack, services resolve each other by service name.
+
+const SERVICE_URLS = {
+  POLICY_SCHEME_SERVICE: process.env.POLICY_SCHEME_SERVICE_URL || 'http://policy-scheme-service:8000',
+};
+
+const ROUTES = [
+  { path: '/api/pss', target: SERVICE_URLS.POLICY_SCHEME_SERVICE, rewriteTo: '' },
+];
+
+module.exports = { SERVICE_URLS, ROUTES };

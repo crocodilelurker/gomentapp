@@ -1,0 +1,27 @@
+# Only the api-gateway is published to the host.
+# Every other service is reachable only inside this compose network, by service name
+# (e.g. http://policy-scheme-service:8000), and the gateway routes to them via
+# api-gateway/src/constants/routes.js.
+
+services:
+  api-gateway:
+    build: ./api-gateway
+    env_file: .env
+    ports:
+      - "${GATEWAY_HOST_PORT:-8000}:8000"
+    depends_on:
+      policy-scheme-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  policy-scheme-service:
+    build: ./policy-scheme-service
+    env_file: .env
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
