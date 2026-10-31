@@ -20,9 +20,20 @@ services:
 
   policy-scheme-service:
     build: ./policy-scheme-service
-    env_file: .env
+    env_file:
+      - .env
+      - ./policy-scheme-service/.env
+    environment:
+      # The service speaks plain S3; locally its credentials are MinIO's root user.
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?}
     expose:
       - "8000"
+    volumes:
+      - policy-catalog-data:/app/data    # SQLite metadata catalog
+    depends_on:
+      minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 10s
@@ -47,6 +58,26 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  minio:
+    # Official minio/minio images are no longer published; pgsty/minio is a maintained community build.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    expose:
+      - "9000"    # S3 API
+      - "9001"    # web console (internal only)
+    volumes:
+      - minio-data:/data    # raw/ and parsed/ policy files
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     env_file: .env
@@ -61,3 +92,5 @@ services:
 
 volumes:
   rag-chroma-data:
+  policy-catalog-data:
+  minio-data:

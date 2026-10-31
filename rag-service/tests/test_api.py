@@ -33,6 +33,23 @@ def test_ingest_accepts_a_txt_file_with_metadata(client):
     assert isinstance(body["document_id"], str)
 
 
+def test_ingest_links_chunks_to_a_caller_supplied_document_id(client):
+    document_id = "b" * 64
+
+    res = upload(client, TEXT.encode(), document_id=document_id, category="c")
+
+    assert res.status_code == 201
+    assert res.json()["document_id"] == document_id
+    [result] = client.post("/retrieve", json={"query": "apple harvest", "top_k": 1}).json()["results"]
+    assert result["metadata"]["document_id"] == document_id
+    assert result["metadata"]["category"] == "c"
+
+
+@pytest.mark.parametrize("document_id", ["../etc/passwd", "has space", "x" * 129])
+def test_ingest_rejects_unsafe_document_ids(client, document_id):
+    assert upload(client, TEXT.encode(), document_id=document_id).status_code == 422
+
+
 def test_ingest_rejects_files_that_are_not_txt(client):
     assert upload(client, b"%PDF", filename="policy.pdf").status_code == 415
 
@@ -81,6 +98,9 @@ class FailingGenerator:
     def generate(self, instructions, prompt):
         raise self.error
 
+    def generate_json(self, instructions, prompt, schema_name, schema):
+        raise self.error
+
 
 @pytest.mark.parametrize(
     ("error", "status"),
@@ -122,3 +142,31 @@ def test_embedding_failures_map_to_http_errors(service, error, status, call):
     service.embedder = FailingEmbedder(error)
 
     assert call(TestClient(create_app(service))).status_code == status
+
+
+def test_summarize_returns_the_three_point_wise_sections(client, generator):
+    generator.json_responses = [{"eligibility": ["1. e1", "e2"], "benefits": ["- b1"], "requirements": []}]
+
+    res = client.post("/summarize", json={"text": TEXT, "scheme_name": "s"})
+
+    assert res.status_code == 200
+    assert res.json() == {"eligibility": ["e1", "e2"], "benefits": ["b1"], "requirements": []}
+
+
+@pytest.mark.parametrize("payload", [{}, {"text": ""}, {"text": "t", "scheme_name": "x" * 201}])
+def test_summarize_validates_the_request(client, payload):
+    assert client.post("/summarize", json=payload).status_code == 422
+
+
+def test_summarize_rejects_text_with_no_content(client):
+    assert client.post("/summarize", json={"text": " ~~ "}).status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [(GeneratorNotConfiguredError("no key"), 503), (GenerationError("upstream"), 502)],
+)
+def test_summarize_maps_generator_failures_to_http_errors(service, error, status):
+    service.generator = FailingGenerator(error)
+
+    assert TestClient(create_app(service)).post("/summarize", json={"text": TEXT}).status_code == status

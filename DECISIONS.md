@@ -35,6 +35,46 @@
 - **Keys:** `OPENROUTER_API_KEY` is in the global `.env` next to `OPENAI_API_KEY`. Generation stays on OpenAI `gpt-4o-mini`.
 - **Errors:** A missing embedding key returns `503` on `/ingest`, `/retrieve` and `/ask`, and OpenRouter failures return `502`.
 
+## 2026-10-31 — policy-scheme-service: storage, catalog and vector linking
+
+- **Three stores, each with one job:** MinIO holds the raw and parsed files, a relational catalog holds provenance, metatags and status, and ChromaDB holds only chunks and embeddings plus `document_id`. Binary files never go in a database.
+- **Content addressing:** `document_id` = SHA-256 of the raw bytes. It is the object key (`raw/<id>.<ext>`, `parsed/<id>.txt`), the catalog primary key and the chunk pointer in the vector DB. User file names are display-only (base name, control characters removed).
+- **Idempotency:** An identical file is never stored or embedded twice (`200 duplicate: true`). Only `FAILED` documents are retried on re-upload, and `POST /policies/:id/reindex` is the manual retry.
+- **Write order:** Objects are written first and the catalog row second, then indexing runs. A catalog row always points to objects that exist, and writing the same object again is harmless because keys are content addressed.
+- **Object storage image:** `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`. Official `minio/minio` images are no longer published on Docker Hub, and `bitnami/minio` moved to the frozen `bitnamilegacy`. pgsty is a maintained community build of MinIO with the same CLI.
+- **S3 client:** `@aws-sdk/client-s3` v3 (the Node equivalent of boto3) with path-style addressing, and checksums only when required, for compatibility with non-AWS servers. Moving to AWS S3 or Cloudflare R2 is a config change only.
+- **Credentials:** MinIO root user/password live in the global `.env`. Compose maps them to the service's generic `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`. A dedicated MinIO service account is a production follow-up.
+- **Catalog engine:** SQLite via the built-in `node:sqlite` (no native dependency), stored in the `policy-catalog-data` volume. The `document_catalog` schema follows the agreed ledger and adds metatag columns, `size_bytes`, `chunk_count`, `error_message` and `updated_at`. Moving to PostgreSQL later means swapping only `DocumentCatalog`.
+- **Extraction location:** policy-scheme-service extracts text (for `.txt`: strict UTF-8 decode) and stores it under `parsed/`. rag-service still does sanitization, chunking and embedding. New formats (PDF/DOCX) are added as entries in `lib/fileTypes.js`.
+- **Indexing is synchronous (superseded below):** Upload waited for rag-service and returned `502` on indexing failure.
+- **Originals are served through the service:** `/policies/:id/file` streams from MinIO through the gateway, because MinIO is internal, so presigned URLs would not reach clients.
+- **rag-service contract:** `/ingest` accepts `document_id` (pattern `^[A-Za-z0-9_-]{1,128}$`) and `category`. Its fallback id is now the SHA-256 of the raw bytes, matching policy-scheme-service.
+- **Testing:** Real SQLite (in memory and on a temp file) and a real local HTTP server for the rag client. A command-recording fake S3 client and in-memory storage/rag stand-ins are used so tests need no MinIO.
+
+## 2026-10-31 — Policy summaries (Eligibility / Benefits / Requirements)
+
+- **Fixed layout:** Every summary has three numbered, point-wise sections: 1 Eligibility (Who are eligible), 2 Benefits (What are the benefits), 3 Requirements (What are the required documents or proofs).
+- **Grounding:** `gpt-4o-mini` at temperature 0 with "use ONLY the document" instructions. A section the document doesn't cover is an empty list (shown as "Not stated in the document."), never a guess.
+- **Reliable shape:** OpenAI structured outputs (`json_schema`, `strict: true`) force exactly three string arrays. Output is still validated, and points are cleaned of bullets/numbering, extra whitespace, empties and case-insensitive duplicates. Uppercase markers such as "(SC)" are kept as content.
+- **Long documents:** If the text is longer than `SUMMARY_MAX_CHARS` (default 60000), it is summarised in parts (500-char overlap), then a merge call combines the parts and removes duplicates.
+- **Where:** rag-service `POST /summarize` generates the summary (it owns the OpenAI setup). policy-scheme-service calls it on upload, stores `summaries/<sha256>.json` in MinIO, and tracks `summary_status` / `summary_path` / `summary_error` in the catalog.
+- **Failure isolation:** A failed summary never fails the upload (`summary_status: FAILED`), and indexing and summarising run independently. Re-upload retries only failed steps, and `POST /policies/:id/summarize` regenerates on demand.
+- **Formats:** Stored as JSON, which is the canonical form. Markdown is rendered on request (`?format=markdown`).
+- **Catalog migration:** New columns are added with `ALTER TABLE` when an older catalog file is opened. Older rows have `summary_status = NULL` and are summarised on their next re-upload or via `/summarize`.
+
+## 2026-10-31 — Background processing for indexing and summaries
+
+- **Async uploads:** `POST /policies` returns `202 Accepted` once the files are in MinIO and the catalog row exists. Indexing (`INDEX`) and summarising (`SUMMARIZE`) run as separate background jobs.
+- **Queue choice:** A durable job table (`processing_jobs`) in the existing SQLite catalog, plus an in-process worker. There are no new containers (Redis/BullMQ etc.), and queued work survives restarts. Moving to a dedicated queue later only means replacing `JobQueue`/`JobWorker`.
+- **Visible state:** Documents (`extraction_status`, `summary_status`) and jobs share one lifecycle: `PENDING → PROCESSING → COMPLETED | FAILED`. `GET /policies/:id/status` gives one `processing_status`, each step's status and error, and the document's jobs. `GET /jobs?status=…` shows the queue.
+- **Retries:** Up to `JOB_MAX_ATTEMPTS` (default 3) with exponential backoff (`JOB_RETRY_BASE_MS` × 2^(attempt−1): 10s, 20s). While waiting, the step is `PENDING` with the last error. 4xx responses from rag-service and missing stored files are permanent and fail immediately.
+- **No duplicate work:** At most one active job per document and step. Re-uploads, `/reindex` and `/summarize` return the existing queued or running job instead of adding another.
+- **Concurrency:** `JOB_CONCURRENCY` (default 1), to respect rate limits on free OpenRouter models. The worker wakes as soon as a job is queued; the poll interval (`JOB_POLL_INTERVAL_MS`) only catches due retries.
+- **Crash safety:** On startup, jobs and steps left `PROCESSING` go back to `PENDING`. On `SIGTERM` the worker stops claiming jobs and lets running ones finish.
+- **Schema upgrade:** Adding `PROCESSING` changes a CHECK constraint, which SQLite can't alter, so older catalog files are rebuilt once in a transaction when opened.
+- **API changes:** `/reindex` and `/summarize` now return `202 { document, job }`. The synchronous `502` responses (`IndexingError`, `SummaryError`) are removed, and failures show up in the status instead.
+- **Test fixture:** `policy-scheme-service/tests/fixtures/sample-policy.txt` is fictional test data, created at the user's explicit request. It is labelled as fictional inside the file and is used by an end-to-end route test and for manual `curl` testing.
+
 ## 2026-10-31 — frontend service containerization & gateway wiring
 
 - **Containerization:** Multi-stage `node:24-alpine` Dockerfile compiles Vite static assets into `dist/` and serves them using a zero-dependency native Node HTTP runner (`server.js`).
