@@ -17,6 +17,11 @@ The theme is "Civic Pulse, Digital Governance & Public Information"
 │   │   ├── app.js
 │   │   └── server.js
 │   └── tests/
+├── frontend/                 # React (Vite) civic application & landing page
+│   ├── src/
+│   ├── tests/
+│   ├── server.js             # Minimal static asset runner & health check
+│   └── Dockerfile
 ├── policy-scheme-service/    # Express service — internal only
 │   ├── src/
 │   │   ├── app.js
@@ -53,6 +58,7 @@ Run a service's unit tests locally:
 ```bash
 cd api-gateway && npm install && npm test
 cd policy-scheme-service && npm install && npm test
+cd frontend && npm install && npm test
 cd rag-service && python3 -m venv .venv && source .venv/bin/activate \
   && pip install -r requirements-dev.txt && pytest
 ```
@@ -113,5 +119,6 @@ Notes:
 - `api-gateway` (Express): published on host port `8000`, health at `GET /health`, proxies mapped prefixes to internal services, returns `404` for unmapped paths and `502` if a service is unreachable.
 - `policy-scheme-service` (Express): internal only, health at `GET /health`, reachable through the gateway at `GET /api/pss/health`.
 - `rag-service` (Python/FastAPI): internal only, reachable at `/api/rag/*`. Ingests `.txt` policies into ChromaDB with Nemotron embeddings (via OpenRouter), serves top-K retrieval, and answers questions with gpt-4o-mini. ChromaDB data persists in a named volume.
+- `frontend` (React/Vite): internal only, health at `GET /health`, serves civic landing page and policy inquirer app, reachable through the gateway at `/`.
 - Every container listens on port `8000` internally; services reach each other by compose service name.
 - The global `.env` is loaded into every service through `env_file`. A service may add its own `<service>/.env` after it (rag-service does).
