@@ -1,0 +1,29 @@
+TEST DATA - FICTIONAL DOCUMENT
+This file was written only for testing gomentapp. It does not describe any real government scheme, department, amount or rule.
+
+Sample Village Solar Pump Assistance Scheme
+Issued by: Sample Department of Testing
+Release date: 2026-01-15
+
+1. Purpose
+The scheme helps small farmers replace diesel irrigation pumps with solar pumps.
+
+2. Eligibility
+- The applicant must be a farmer aged 18 years or above.
+- The applicant must own or lease up to 2 hectares of farmland.
+- Annual family income must not exceed Rs. 3,00,000.
+- Farmers who received a solar pump under any earlier scheme are not eligible.
+
+3. Benefits
+- A subsidy of 60 percent of the cost of one solar pump, up to Rs. 90,000.
+- Free installation by an approved vendor.
+- Five years of free maintenance.
+
+4. Required Documents
+- Proof of identity.
+- Land ownership or lease record.
+- Income certificate issued in the last 12 months.
+- Bank account details for the subsidy transfer.
+
+5. How to Apply
+Submit the application form with the documents at the block office.

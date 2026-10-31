@@ -7,6 +7,9 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 
+# SQLite catalog lives here (mounted as a volume in docker-compose)
+RUN mkdir -p /app/data && chown node:node /app/data
+
 ENV PORT=8000
 EXPOSE 8000
 

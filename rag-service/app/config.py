@@ -15,6 +15,7 @@ class Settings:
     chunk_size: int = 500
     chunk_overlap: int = 50
     top_k: int = 4
+    summary_max_chars: int = 60000
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -35,4 +36,5 @@ class Settings:
             chunk_size=int(get("CHUNK_SIZE", defaults.chunk_size)),
             chunk_overlap=int(get("CHUNK_OVERLAP", defaults.chunk_overlap)),
             top_k=int(get("RAG_TOP_K", defaults.top_k)),
+            summary_max_chars=int(get("SUMMARY_MAX_CHARS", defaults.summary_max_chars)),
         )

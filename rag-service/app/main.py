@@ -27,6 +27,7 @@ def build_service(settings: Settings) -> RagService:
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
         default_top_k=settings.top_k,
+        summary_max_chars=settings.summary_max_chars,
     )
 
 

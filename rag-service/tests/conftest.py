@@ -33,14 +33,25 @@ class HashingEmbedder:
 
 
 class RecordingGenerator:
-    """Records the prompt it receives so tests can assert on what reaches the LLM."""
+    """Records the prompts it receives so tests can assert on what reaches the LLM.
+
+    Structured (JSON) calls return queued `json_responses` in order, or three empty sections.
+    """
 
     def __init__(self):
         self.calls = []
+        self.json_calls = []
+        self.json_responses = []
 
     def generate(self, instructions, prompt):
         self.calls.append({"instructions": instructions, "prompt": prompt})
         return f"generated answer #{len(self.calls)}"
+
+    def generate_json(self, instructions, prompt, schema_name, schema):
+        self.json_calls.append({"instructions": instructions, "prompt": prompt, "schema_name": schema_name, "schema": schema})
+        if self.json_responses:
+            return self.json_responses.pop(0)
+        return {"eligibility": [], "benefits": [], "requirements": []}
 
 
 @pytest.fixture

@@ -48,15 +48,16 @@ class TestBuildPrompt:
 
 
 class FakeResponses:
-    def __init__(self, error=None):
+    def __init__(self, error=None, output_text="model answer"):
         self.error = error
+        self.output_text = output_text
         self.kwargs = None
 
     def create(self, **kwargs):
         self.kwargs = kwargs
         if self.error:
             raise self.error
-        return SimpleNamespace(output_text="model answer")
+        return SimpleNamespace(output_text=self.output_text)
 
 
 class TestOpenAIGenerator:
@@ -86,3 +87,34 @@ class TestOpenAIGenerator:
 
         with pytest.raises(GenerationError):
             generator.generate("i", "p")
+
+
+class TestOpenAIGeneratorStructuredOutput:
+    def make(self, responses):
+        return OpenAIGenerator(api_key="key", model="gpt-4o-mini", client=SimpleNamespace(responses=responses))
+
+    def test_requests_strict_json_schema_output_and_parses_it(self):
+        responses = FakeResponses(output_text='{"eligibility": ["a"]}')
+
+        result = self.make(responses).generate_json("instructions", "prompt", "policy_summary", {"type": "object"})
+
+        assert result == {"eligibility": ["a"]}
+        assert responses.kwargs == {
+            "model": "gpt-4o-mini",
+            "instructions": "instructions",
+            "input": "prompt",
+            "temperature": 0,
+            "text": {"format": {"type": "json_schema", "name": "policy_summary", "schema": {"type": "object"}, "strict": True}},
+        }
+
+    def test_raises_on_output_that_is_not_json(self):
+        with pytest.raises(GenerationError):
+            self.make(FakeResponses(output_text="not json")).generate_json("i", "p", "n", {})
+
+    def test_wraps_openai_errors(self):
+        with pytest.raises(GenerationError):
+            self.make(FakeResponses(error=openai.OpenAIError("boom"))).generate_json("i", "p", "n", {})
+
+    def test_raises_when_no_api_key_is_configured(self):
+        with pytest.raises(GeneratorNotConfiguredError):
+            OpenAIGenerator(api_key="", model="gpt-4o-mini").generate_json("i", "p", "n", {})

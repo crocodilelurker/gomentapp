@@ -14,6 +14,7 @@ def test_defaults_when_env_is_empty():
     assert settings.chunk_size == 500
     assert settings.chunk_overlap == 50
     assert settings.top_k == 4
+    assert settings.summary_max_chars == 60000
 
 
 def test_reads_values_from_env():
@@ -29,6 +30,7 @@ def test_reads_values_from_env():
             "CHUNK_SIZE": "800",
             "CHUNK_OVERLAP": "120",
             "RAG_TOP_K": "5",
+            "SUMMARY_MAX_CHARS": "30000",
         }
     )
 
@@ -43,4 +45,5 @@ def test_reads_values_from_env():
         chunk_size=800,
         chunk_overlap=120,
         top_k=5,
+        summary_max_chars=30000,
     )

@@ -1,5 +1,6 @@
 """Step 5 — Context injection (5.1) and generative synthesis (5.2) with an OpenAI model."""
 
+import json
 from typing import Protocol
 
 from openai import OpenAI, OpenAIError
@@ -72,3 +73,21 @@ class OpenAIGenerator:
         except OpenAIError as exc:
             raise GenerationError(str(exc)) from exc
         return response.output_text
+
+    def generate_json(self, instructions: str, prompt: str, schema_name: str, schema: dict) -> dict:
+        """Structured output: the model must answer with JSON matching `schema` (strict mode)."""
+        client = self._get_client()
+        try:
+            response = client.responses.create(
+                model=self.model,
+                instructions=instructions,
+                input=prompt,
+                temperature=0,
+                text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}},
+            )
+        except OpenAIError as exc:
+            raise GenerationError(str(exc)) from exc
+        try:
+            return json.loads(response.output_text)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise GenerationError("The model did not return valid JSON") from exc
