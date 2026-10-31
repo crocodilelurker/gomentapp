@@ -34,3 +34,13 @@
 - **Query vs document:** Requests send OpenRouter's `input_type` (`search_document` for chunks, `search_query` for questions). Chunks are embedded in batches of 64.
 - **Keys:** `OPENROUTER_API_KEY` is in the global `.env` next to `OPENAI_API_KEY`. Generation stays on OpenAI `gpt-4o-mini`.
 - **Errors:** A missing embedding key returns `503` on `/ingest`, `/retrieve` and `/ask`, and OpenRouter failures return `502`.
+
+## 2026-10-31 — frontend service containerization & gateway wiring
+
+- **Containerization:** Multi-stage `node:24-alpine` Dockerfile compiles Vite static assets into `dist/` and serves them using a zero-dependency native Node HTTP runner (`server.js`).
+- **Internal port & expose:** Follows the established service standard: listens on port `8000` internally, exposes `8000`, and publishes no direct host ports.
+- **Gateway routing:** Wired into `api-gateway` via `{ path: '/', target: SERVICE_URLS.FRONTEND_SERVICE, rewriteTo: '' }` after `/api/pss` and `/api/rag`. Gateway health remains on `/health`.
+- **Healthcheck:** Standard `wget -qO- http://localhost:8000/health` returning `{"service": "frontend", "status": "ok"}`.
+- **Startup order:** `api-gateway` depends on `frontend` with `condition: service_healthy`.
+- **Testing:** Unit tested with native `node --test` covering `/health`, static file serving, and SPA route fallback (`/app` -> `index.html`).
+
