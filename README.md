@@ -17,6 +17,11 @@ The theme is "Civic Pulse, Digital Governance & Public Information"
 │   │   ├── app.js
 │   │   └── server.js
 │   └── tests/
+├── frontend/                 # React (Vite) civic application & landing page
+│   ├── src/
+│   ├── tests/
+│   ├── server.js             # Minimal static asset runner & health check
+│   └── Dockerfile
 ├── policy-scheme-service/    # Express — policy upload, storage & catalog — internal only
 │   ├── .env.example          # S3/MinIO endpoint + bucket, catalog path, upload limit
 │   ├── src/
@@ -66,6 +71,7 @@ Run a service's unit tests locally:
 ```bash
 cd api-gateway && npm install && npm test
 cd policy-scheme-service && npm install && npm test
+cd frontend && npm install && npm test
 cd rag-service && python3 -m venv .venv && source .venv/bin/activate \
   && pip install -r requirements-dev.txt && pytest
 ```
@@ -239,5 +245,6 @@ Notes:
 - `policy-scheme-service` (Express): internal only, reachable at `/api/pss/*`. Uploads `.txt` policies with metatags, stores the raw and parsed files in MinIO under their SHA-256, catalogues them in SQLite, de-duplicates identical files, and returns `202` immediately. Indexing into the vector DB (via rag-service) and the 3-section point-wise summary (Eligibility, Benefits, Requirements) then run as durable background jobs, with automatic retries. Progress is visible at `/policies/:id/status` and `/jobs`. Original files and summaries can be fetched by `document_id`.
 - `minio`: internal only S3-compatible object storage, data in the `minio-data` volume.
 - `rag-service` (Python/FastAPI): internal only, reachable at `/api/rag/*`. Ingests `.txt` policies into ChromaDB with Nemotron embeddings (via OpenRouter), serves top-K retrieval, and answers questions with gpt-4o-mini. ChromaDB data persists in a named volume.
+- `frontend` (React/Vite): internal only, health at `GET /health`, serves civic landing page and policy inquirer app, reachable through the gateway at `/`.
 - Every container listens on port `8000` internally; services reach each other by compose service name.
 - The global `.env` is loaded into every service through `env_file`. A service may add its own `<service>/.env` after it (rag-service and policy-scheme-service do).

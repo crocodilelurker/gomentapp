@@ -74,3 +74,13 @@
 - **Schema upgrade:** Adding `PROCESSING` changes a CHECK constraint, which SQLite can't alter, so older catalog files are rebuilt once in a transaction when opened.
 - **API changes:** `/reindex` and `/summarize` now return `202 { document, job }`. The synchronous `502` responses (`IndexingError`, `SummaryError`) are removed, and failures show up in the status instead.
 - **Test fixture:** `policy-scheme-service/tests/fixtures/sample-policy.txt` is fictional test data, created at the user's explicit request. It is labelled as fictional inside the file and is used by an end-to-end route test and for manual `curl` testing.
+
+## 2026-10-31 — frontend service containerization & gateway wiring
+
+- **Containerization:** Multi-stage `node:24-alpine` Dockerfile compiles Vite static assets into `dist/` and serves them using a zero-dependency native Node HTTP runner (`server.js`).
+- **Internal port & expose:** Follows the established service standard: listens on port `8000` internally, exposes `8000`, and publishes no direct host ports.
+- **Gateway routing:** Wired into `api-gateway` via `{ path: '/', target: SERVICE_URLS.FRONTEND_SERVICE, rewriteTo: '' }` after `/api/pss` and `/api/rag`. Gateway health remains on `/health`.
+- **Healthcheck:** Standard `wget -qO- http://localhost:8000/health` returning `{"service": "frontend", "status": "ok"}`.
+- **Startup order:** `api-gateway` depends on `frontend` with `condition: service_healthy`.
+- **Testing:** Unit tested with native `node --test` covering `/health`, static file serving, and SPA route fallback (`/app` -> `index.html`).
+
